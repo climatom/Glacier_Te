@@ -95,10 +95,12 @@ for i in range(nl):
                         linewidth=0.5,color=cs[i],alpha=0.15)
         if j == (len(plot_list))-1 and i == nl-1:
             ax.flat[j].legend()
-    print("Processed %s"%fname)
-    print("...pc 99.9 rh = %.3f %%"%np.nanpercentile(data_i["rh"],99.9))
+
+    # print("...pc 99.9 rh = %.3f %%"%np.nanpercentile(data_i["rh"],99.9))
     
     ## Write out
     if not os.path.isdir(din+"cleaned/"):
         os.makedirs(din+"cleaned/")
-    dday.to_csv(din+"cleaned/"+meta["station"][i]+"_day.csv")    
+    dday.to_csv(din+"cleaned/"+meta["station"][i]+"_day.csv")   
+    data_i.to_csv(din+"cleaned/"+meta["station"][i]+".csv")   
+    print("Processed %s"%fname)
