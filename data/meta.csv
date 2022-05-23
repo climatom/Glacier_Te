@@ -1,0 +1,9 @@
+﻿station,lat,lon,elev,sens_z,status
+ag,-8.96,-77.64,4797.00,2,done
+sg,-9.49,-77.34,4790.00,2,done
+qqg,-13.79,-70.89,5180.00,2.5,done
+zongo,-16.25,-68.17,5050.00,2,done
+mort,46.42,9.42,2100.00,3.5,done
+stor,67.90,18.56,1387.00,2,done
+naulek,27.72,86.90,5350.00,var,done
+mera, 27.72,86.88,5770.00,var,done
