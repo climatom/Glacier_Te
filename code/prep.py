@@ -9,10 +9,11 @@ Pre-processes all met data, including:
 import os, datetime, pandas as pd, numpy as np, utils as ut
 import matplotlib.pyplot as plt
 
-emiss=0.985 #(warren, 1999 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6501920/)
+emiss=0.98 #(warren, 1999 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6501920/)
 boltz=5.67*10**-8
 din="/Users/k2147389/Desktop/Papers/Glacier_Te/Public/data/"
 metafile=din+"meta.csv"
+minpc=75 # percent complete in day/window for non-nan
     
 
 meta=pd.read_csv(metafile)
@@ -21,6 +22,7 @@ sin_check=[]
 # Plots of -- T/RH/WS/SIN/LIN/SOUT/LOUT/P
 fig,ax=plt.subplots(4,2)
 fig.set_size_inches(8,10)
+fig2,ax2=plt.subplots(1,1)
 plot_list=["t","rh","u","sin","sout","lin","lout","p"]
 cs=["red","blue","green","orange","cyan","yellow","pink","black"]
 for i in range(nl):
@@ -33,10 +35,16 @@ for i in range(nl):
     data_i.index=data_i.index+datetime.timedelta\
         (hours=meta["time_corr"].iloc[i])
         
+    # Figure out freq (obs/hour)
+    f=1./((data_i.index[1]-data_i.index[0]).total_seconds()/3600.)
+    
+    # Check index is correct
+    data_i=data_i.sort_index()
+        
     # Check s/sout and correct if necessary:
     # toa=ut.sin_toa(doy=dhour.index.dayofyear.values,hour=dhour.index.hour.values,\
-    #                lat=float(meta["lat"].iloc[i]),\
-    #                lon=float(meta["lon"].iloc[i]))
+    #                 lat=float(meta["lat"].iloc[i]),\
+    #                 lon=float(meta["lon"].iloc[i]))
     data_i["sin"].loc[data_i["sin"]<0]=0
     data_i["sin"].loc[data_i["sin"]<data_i["sout"]]=\
         data_i["sout"].loc[data_i["sin"]<data_i["sout"]]
@@ -53,7 +61,6 @@ for i in range(nl):
         data_i["rh"]=data_i["rh"]/100.
         data_i["rh"].loc[data_i["rh"]>1]=1
         data_i["rh"].loc[data_i["rh"]<0]=0
-        
         
         
     # Resample to hour
@@ -78,7 +85,40 @@ for i in range(nl):
         data_i["p"]=ut.ISA(zi/1000.)
     else:
         data_i["p"].loc[np.isnan(data_i["p"])]=np.nanmean(data_i["p"])
-
+    
+    # Compute vapor pressure (scratch var)
+    ei=ut.satvp_huang(data_i["t"].values[:])
+    
+    # Mixing ratio (scratch var)
+    mix=ut.mix(data_i["p"][i],ei)
+    
+    # Virtual temp (scratch var)
+    vi=ut.virtual(data_i["t"]+273.15,mix)
+    
+    # Density (store)
+    data_i["rho"]=ut.rho(data_i["p"][i],vi)
+   
+    
+    # Compute specific humidity 
+    data_i["q"]=ut.satvp_huang(data_i["t"])*0.622/(data_i["p"]*100.)
+    print("Max shum is %.2f g/kg"%(np.nanmax(data_i["q"])*1000.))
+    
+        
+    # Calc albedo
+    # min_periods=int(f*24*minpc/100.)
+    if "albedo" not in data_i.columns:
+        data_i["albedo"]=(data_i["sout"]/data_i["sin"]).rolling(int(f*24)).median(50)
+    # data_i["acc_alb"]=data_i["sout"].rolling(int(f*24)).sum(center=True)/\
+    #     data_i["sin"].rolling(int(f*24)).sum(center=True)
+    # ax2.plot(data_i.index,data_i["albedo"],color=cs[i],alpha=0.2)
+    # print("...Min alb = %.2f, max = %.2f"%\
+    #   (data_i["albedo"].min(), data_i["albedo"].max()))
+        
+    # Calc surface temp
+    data_i["ts"]=np.power(data_i["lout"]/(boltz*emiss),0.25)-273.15
+    data_i["ts"].loc[data_i["ts"]>0]=0.0
+    ax2.plot(data_i.index,data_i["ts"],color=cs[i],alpha=0.2)
+    
 
     # Now compute daily means
     dday={}
