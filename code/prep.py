@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 emiss=0.98 #(warren, 1999 - https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6501920/)
 boltz=5.67*10**-8
-din="/Users/k2147389/Desktop/Papers/Glacier_Te/Public/data/"
+din="../data/"
 metafile=din+"meta.csv"
 minpc=75 # percent complete in day/window for non-nan
     
@@ -90,24 +90,28 @@ for i in range(nl):
     ei=ut.satvp_huang(data_i["t"].values[:])
     
     # Mixing ratio (scratch var)
-    mix=ut.mix(data_i["p"][i],ei)
+    mix=ut.mix(data_i["p"],ei)
     
     # Virtual temp (scratch var)
     vi=ut.virtual(data_i["t"]+273.15,mix)
     
     # Density (store)
-    data_i["rho"]=ut.rho(data_i["p"][i],vi)
+    data_i["rho"]=ut.rho(data_i["p"]*100.,vi)
    
     
     # Compute specific humidity 
-    data_i["q"]=ut.satvp_huang(data_i["t"])*0.622/(data_i["p"]*100.)
+    data_i["q"]=ut.satvp_huang(data_i["t"].values[:])*0.622/(data_i["p"]*100.)*\
+        data_i["rh"].values[:]
     print("Max shum is %.2f g/kg"%(np.nanmax(data_i["q"])*1000.))
     
         
     # Calc albedo
-    # min_periods=int(f*24*minpc/100.)
+    window_len=int(f*24)
+    min_periods=int(f*24*minpc/100.)
     if "albedo" not in data_i.columns:
-        data_i["albedo"]=(data_i["sout"]/data_i["sin"]).rolling(int(f*24)).median(50)
+        data_i["albedo"]=\
+            data_i["sout"].rolling(window_len,min_periods=min_periods,center=True).sum()/\
+            data_i["sin"].rolling(window_len,min_periods=min_periods,center=True).sum()             
     # data_i["acc_alb"]=data_i["sout"].rolling(int(f*24)).sum(center=True)/\
     #     data_i["sin"].rolling(int(f*24)).sum(center=True)
     # ax2.plot(data_i.index,data_i["albedo"],color=cs[i],alpha=0.2)
@@ -119,13 +123,24 @@ for i in range(nl):
     data_i["ts"].loc[data_i["ts"]>0]=0.0
     ax2.plot(data_i.index,data_i["ts"],color=cs[i],alpha=0.2)
     
+    # Calc surface vapur pressure
+    data_i["qs"]=ut.satvp_huang(data_i["ts"].values[:])*0.622/(data_i["p"]*100.)
+    
+    # Interpolate gaps in measurement height
+    data_i["zu"].interpolate(inplace=True)
+    data_i["zt"].interpolate(inplace=True)
+    data_i["zq"]=data_i["zt"].values[:]
+    
+    # Change t and ts to K
+    data_i["t"]=data_i["t"]+273.15
+    data_i["ts"]=data_i["ts"]+273.15
 
     # Now compute daily means
     dday={}
     for v in data_i.columns:
         isnull=np.isnan(data_i[v])*1.
         isnull=isnull.resample("H").sum()
-        dday[v]=data_i[v].resample("H").mean()
+        dday[v]=data_i[v].resample("H").mean() 
         dday[v].loc[isnull>0]=np.nan
     dday=pd.DataFrame(data_i,index=isnull.index)
     
