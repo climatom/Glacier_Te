@@ -9,7 +9,7 @@ from numba import jit, float64, float32, int32
 import numba as nb
 import scipy.optimize as optimize
 from scipy.optimize import minimize
-
+import warnings
 
 #_____________________________________________________________________________#
 # Define constants. 
@@ -270,7 +270,7 @@ def SHF(ta,ts,zt,z0_t,ust,rho,corr_h):
         
     """    
     
-    if (ta-ts)==0: shf=0; print("Skipped --> t equal")
+    if (ta-ts)==0: shf=0;# print("Skipped --> t equal")
     else: shf = rho * cp * ust * k * (ta-ts) / (np.log(zt/z0_t) - corr_h)
 
     return shf
@@ -556,7 +556,7 @@ def SEB(ta,ts,qa,qs,rho,u,p,sin,sout,lin,lout,z0_m,zu,zt,zq,ds):
     
     # Begin iteration
     for i in range(nt):
-        print(i)
+        # print(i)
         
         # Skip all computations if there any NaNs at this time-step 
         if np.isnan(ta[i]) or np.isnan(sin[i]) or np.isnan(ts[i]) or \
@@ -593,6 +593,15 @@ def SEB(ta,ts,qa,qs,rho,u,p,sin,sout,lin,lout,z0_m,zu,zt,zq,ds):
         lwn_log[i]=lwn
         # Log lhf
         swn_log[i]=swn        
+        
+        if np.abs(shf) > 1000. or np.abs(lhf)>1000\
+            or np.abs(swn)>2000 or np.abs(lwn>1000):
+                print("Suspicious values encountered!!")
+                print("SHF/LHF/SWN/LWN-->")
+                print(shf,lhf,swn,lwn)
+                print("T/TS/Q/QS/U/P/RHO/Z0m/ZU/ZT")
+                print(ta[i],ts[i],qa[i],qs[i],u[i],p[i],rho[i],z0_m[i],zu[i],zt[i])
+
 
     return shf_log, lhf_log, swn_log, lwn_log, seb_log, melt_log,sub_log
 

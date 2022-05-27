@@ -102,7 +102,7 @@ for i in range(nl):
     # Compute specific humidity 
     data_i["q"]=ut.satvp_huang(data_i["t"].values[:])*0.622/(data_i["p"]*100.)*\
         data_i["rh"].values[:]
-    print("Max shum is %.2f g/kg"%(np.nanmax(data_i["q"])*1000.))
+    # print("Max shum is %.2f g/kg"%(np.nanmax(data_i["q"])*1000.))
     
         
     # Calc albedo
@@ -130,6 +130,14 @@ for i in range(nl):
     data_i["zu"].interpolate(inplace=True)
     data_i["zt"].interpolate(inplace=True)
     data_i["zq"]=data_i["zt"].values[:]
+    
+    # Do not trust measurements < 0.5 m above surface
+    dnotrust_t=data_i["zt"]<0.5
+    dnotrust_u=data_i["zu"]<0.5
+    data_i["t"].loc[dnotrust_t]=np.nan
+    data_i["q"].loc[dnotrust_t]=np.nan
+    data_i["u"].loc[dnotrust_u]=np.nan
+    
     
     # Change t and ts to K
     data_i["t"]=data_i["t"]+273.15

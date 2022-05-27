@@ -21,6 +21,7 @@ metafile=din+"meta.csv"
 meta=pd.read_csv(metafile)
 nl=len(meta)
 fig,ax=plt.subplots(1,1)
+log={}
 # Begin 
 for i in range(nl):
     fname=din_clean+meta["station"].iloc[i]+".csv"
@@ -40,12 +41,21 @@ for i in range(nl):
     
     
     # Compute SEB
-    shf, lhf, swn, lwn, seb, melt, subl =\
+    mod={}
+    mod["shf"],mod["lhf"],mod["swn"],mod["lwn"],mod["seb"],mod["melt"],mod["subl"] =\
     core.SEB(data_i["t"].values[:],data_i["ts"].values[:],data_i["q"].values[:],\
              data_i["qs"].values[:],data_i["rho"].values[:],data_i["u"].values[:],\
                  data_i["p"].values[:],data_i["sin"].values[:],\
                     data_i["sout"].values[:],data_i["lin"].values[:],\
                         data_i["lout"].values[:],z0_m[:],data_i["zu"].values[:],\
                             data_i["zt"].values[:],data_i["zt"].values[:],ds)
+    
+    mod=pd.DataFrame(mod,index=data_i.index)
+    log[meta["station"][i]]=mod
 
-    ax.plot(shf)
+
+# Iterate again and process to daily
+    
+
+    
+    
