@@ -573,7 +573,7 @@ def SEB(ta,ts,qa,qs,rho,u,p,sin,sout,lin,lout,z0_m,zu,zt,zq,ds):
     
         # Compute the radiative heat fluxes
         lwn = LW(lin[i],lout[i]); 
-        swn=SW(sin[i],lin[i])
+        swn=SW(sin[i],sout[i])
         
         # Initial SEB 
         seb=shf+lhf+swn+lwn
@@ -600,10 +600,37 @@ def SEB(ta,ts,qa,qs,rho,u,p,sin,sout,lin,lout,z0_m,zu,zt,zq,ds):
                 print("SHF/LHF/SWN/LWN-->")
                 print(shf,lhf,swn,lwn)
                 print("T/TS/Q/QS/U/P/RHO/Z0m/ZU/ZT")
-                print(ta[i],ts[i],qa[i],qs[i],u[i],p[i],rho[i],z0_m[i],zu[i],zt[i])
-
-
+                print(ta[i],ts[i],qa[i],qs[i],u[i],p[i],rho[i],z0_m[i],zu[i],\
+                      zt[i])
     return shf_log, lhf_log, swn_log, lwn_log, seb_log, melt_log,sub_log
 
 
 
+#_____________________________________________________________________________#
+# Empirical functions
+#_____________________________________________________________________________# 
+@jit(float64[:](float64[:],float64,float64,float64),nopython=True)
+def tdep(t,ttip,a,b):
+    """
+    This function computes the stemperature-dependent energy flux (from
+    Giesen and Oerlemans = (2012); see Eq. 3 here: 
+        https://tc.copernicus.org/articles/6/1463/2012/tc-6-1463-2012.pdf)
+    
+    
+    Inputs/Outputs (units: explanation): 
+    
+    In:
+        - t (k or C)      : air temperature (/temp-like array)
+        - ttip (k or C)   : temperature beyond which to expect linear f
+        - a (W/m**2)      : energy flux at ttip
+        - b (W/m**2/C)    :change in energy flux/degree 
+    Out:
+        - tdep (W/m**2)   : temperature-dependent heat flux
+        
+    """
+    _tdep=np.zeros(len(t))*np.nan
+    _tdep[t<ttip]=a
+    _tdep[t>=ttip]=a+b*(t[t>=ttip]-ttip)
+
+    return _tdep
+    

@@ -7,6 +7,7 @@ Created on Mon May 23 11:14:20 2022
 """
 import pandas as pd, numpy as np
 from numba import jit, int32, float32, float64
+import numba as nb
 
 # Constants 
 c=2*np.pi # Radians in circle
@@ -108,6 +109,52 @@ def virtual(t,mr):
     
     return tv
 
+
+@jit(nb.typeof((np.array([1.,]),np.array([1.,])))(float64[:],float64[:]),\
+     nopython=True) 
+def CpLv(r,tk):
+    
+    """
+    This function computes the temperature- (latent heat of vapoorization)
+    and mixing ratio- dependent (specific heat capacity) values
+    
+    Inputs/Outputs (units: explanation): 
+    
+    In:
+        - r (unitless)  : mixing ratio
+        - tk (k)        : mair temperature 
+        
+    Out:
+        
+        - cp (J/kg/k)   : specific heat capacity of air
+        - lv (J/kg)     : latent heat of vaporization
+    """    
+    
+    cp=1005.7*(1-r)+1850.*r*(1-r)
+    lv=1.918*10**6*(tk/(tk-33.91))**2
+    
+    return cp,lv
+
+@jit(nb.typeof((np.array([1.,])))(float64[:],float64[:]),nopython=True) 
+def Teq(tk,q):
+    
+     
+    """
+    This function computes the equivalent temperature 
+    
+    Inputs/Outputs (units: explanation): 
+    
+    In:
+        - tk (k)        : mair temperature 
+        - q (unitless)  : specific humidity
+        
+    Out:   
+        - teq (k)   : equivalent temperature (K)
+    """      
+    r=q/(1-q)
+    cp,lv=CpLv(r,tk)
+    teq=tk+q*lv/cp
+    return teq
 
 def rho(p,tv):
     

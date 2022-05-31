@@ -14,21 +14,24 @@ boltz=5.67*10**-8
 din="../data/"
 metafile=din+"meta.csv"
 minpc=75 # percent complete in day/window for non-nan
-    
+date_parser = lambda x: datetime.datetime.strptime(x, "%d/%m/%Y %H:%M")
 
 meta=pd.read_csv(metafile)
 nl=len(meta)
 sin_check=[]
 # Plots of -- T/RH/WS/SIN/LIN/SOUT/LOUT/P
-fig,ax=plt.subplots(4,2)
-fig.set_size_inches(8,10)
-fig2,ax2=plt.subplots(1,1)
+# fig,ax=plt.subplots(4,2)
+# fig.set_size_inches(8,10)
+# fig2,ax2=plt.subplots(1,1)
 plot_list=["t","rh","u","sin","sout","lin","lout","p"]
 cs=["red","blue","green","orange","cyan","yellow","pink","black"]
 for i in range(nl):
+    
+    fig,ax=plt.subplots(1,1)
+    
     fname=din+meta["station"].iloc[i]+".csv"
     data_i=pd.read_csv(fname,parse_dates=True,\
-                         index_col="date")
+                         index_col="date",date_parser=date_parser)
     # Ensure floats
     for c in data_i.columns: data_i[c]=data_i[c].astype(float)
     # Convert time to UTC
@@ -104,6 +107,9 @@ for i in range(nl):
         data_i["rh"].values[:]
     # print("Max shum is %.2f g/kg"%(np.nanmax(data_i["q"])*1000.))
     
+    # Compute the equivalent temperature (k)
+    data_i["teq"]=ut.Teq(data_i["t"].values[:]+273.15,data_i["q"].values[:])
+    
         
     # Calc albedo
     window_len=int(f*24)
@@ -121,7 +127,7 @@ for i in range(nl):
     # Calc surface temp
     data_i["ts"]=np.power(data_i["lout"]/(boltz*emiss),0.25)-273.15
     data_i["ts"].loc[data_i["ts"]>0]=0.0
-    ax2.plot(data_i.index,data_i["ts"],color=cs[i],alpha=0.2)
+    # ax2.plot(data_i.index,data_i["ts"],color=cs[i],alpha=0.2)
     
     # Calc surface vapur pressure
     data_i["qs"]=ut.satvp_huang(data_i["ts"].values[:])*0.622/(data_i["p"]*100.)
@@ -153,13 +159,15 @@ for i in range(nl):
     dday=pd.DataFrame(data_i,index=isnull.index)
     
     # Plot daily means
-    for j in range(len(plot_list)):
-        ax.flat[j].plot(dday[plot_list[j]],label=meta["station"].iloc[i],\
-                        linewidth=0.5,color=cs[i],alpha=0.15)
-        if j == (len(plot_list))-1 and i == nl-1:
-            ax.flat[j].legend()
+    # for j in range(len(plot_list)):
+    #     ax.flat[j].plot(dday[plot_list[j]],label=meta["station"].iloc[i],\
+    #                     linewidth=0.5,color=cs[i],alpha=0.15)
+    #     if j == (len(plot_list))-1 and i == nl-1:
+    #         ax.flat[j].legend()
 
     # print("...pc 99.9 rh = %.3f %%"%np.nanpercentile(data_i["rh"],99.9))
+    ax.plot(data_i.index,data_i["t"].values[:],linewidth=0.2)
+    fig.savefig(din+"scratch/"+meta["station"][i]+".png")
     
     ## Write out
     if not os.path.isdir(din+"cleaned/"):
