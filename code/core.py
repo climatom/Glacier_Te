@@ -634,3 +634,36 @@ def tdep(t,ttip,a,b):
 
     return _tdep
     
+
+
+@jit(float64[:](float64[:],float64,float64,float64,float64[:]),\
+     nopython=True)
+def eti(t,tf,sf,ttip,swn):
+     
+    """
+    The enanced temperature-index model from Pellicciotti et al. (2005).
+    See Eq. 3 here(ignoring backslashes):
+    https://www.cambridge.org/core/journals/journal-of-glaciology/\
+        article/an-enhanced-temperatureindex-glacier-melt-model-including-\
+            the-shortwave-radiation-balance-development-and-testing-for-h\
+                aut-glacier-darolla-switzerland/E96A8B8D2903523DE6DBF\
+                    88E2E06E6D9
+                    
+    Inputs/Outputs (units: explanation): 
+    
+    In:
+        - t (k or C)              : air temperature (/temp-like array)
+        - tf (mm we/t/C)          : temperature melt factor
+        - sf (mm we/t/[W/m**2])   : shortwave melt factor
+        - ttip (K or C)           : melt threshold (K or C; must be same as t)
+        - swn (W/m**2)            : net shortwave radiation
+    Out:
+        - m (mm/t)                : melt per timestep (t)              
+    """
+
+    m=np.zeros(len(t))*np.nan
+    m[t<=ttip]=0
+    m[t>ttip]=t[t>ttip]*tf+sf*swn[t>ttip]
+    
+    return m
+    

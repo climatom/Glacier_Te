@@ -26,6 +26,20 @@ def tdep_f(coefs,t,tdep):
     err=np.nanmean(np.abs(core.tdep(t[idx],ttip,a,b)-tdep[idx]))
     
     return err
+
+# Ditto for eti
+def eti_f(coefs,t,swn,melt):
+    
+    # eti(t,tf,sf,ttip,swn):
+    tf=coefs[0]
+    sf=coefs[1]
+    ttip=coefs[2]
+    idx=np.logical_and(~np.isnan(t),~np.isnan(swn))
+    err=np.nanmean(np.abs(core.eti(t[idx],tf,sf,ttip,swn[idx])-melt))
+    
+    return err
+    
+    
         
 
 # Params
@@ -47,6 +61,10 @@ seb_meta={}
 nl=len(meta)
 fig,ax=plt.subplots(1,1)
 log={}
+err_log=np.zeros((nl,2))*np.nan
+err_log_2=np.zeros(err_log.shape)*np.nan
+r2_log=np.zeros(err_log.shape)
+r2_log_2=np.zeros(err_log.shape)*np.nan
 # Begin 
 for i in range(nl):
     fname=din_clean+meta["station"].iloc[i]+".csv"
@@ -98,9 +116,9 @@ fig,ax=plt.subplots(2,4)
 fig.set_size_inches(8,5)
 fig.set_dpi(300)
 # Plot t/te vs tdep
-fig2,ax2=plt.subplots(2,4)
-fig2.set_size_inches(8,5)
-fig2.set_dpi(300)
+# fig2,ax2=plt.subplots(2,4)
+# fig2.set_size_inches(8,5)
+# fig2.set_dpi(300)
 day={}
 # Begin 
 for i in range(nl):
@@ -149,29 +167,44 @@ for i in range(nl):
         ax.flat[i].set_ylabel("W m$^{-2}$")
         
 
-    ax2.flat[i].scatter(day_i["teq"].values[:],day_i["tdep"].values[:],s=2)
+    # ax2.flat[i].scatter(day_i[tvers].values[:],day_i["tdep"].values[:],s=2)
     day[meta["station"].iloc[i]]=day_i
+    idx=np.logical_and(np.logical_and(~np.isnan(day_i["t"]),\
+                                      ~np.isnan(day_i["teq"])),\
+                                      ~np.isnan(day_i["tdep"]))
+    y=day_i["tdep"].values[idx] 
+    y2=day_i["melt"].values[idx] 
+    x2=day_i["swn"].values[idx]
+    ts=["t","teq"]
+    nt=len(ts)
+    for ti in range(nt):
+        x=day_i[ts[ti]].values[idx]
+        sol=minimize(fun=tdep_f,
+                                x0=np.array([273.15,-50,10]),
+                                args=(x,y),
+                                bounds=((None,None),(None,None),(None,None)))
+        pred=core.tdep(x,sol.x[0],sol.x[1],sol.x[2])
+        err_log[i,ti]=np.mean(np.abs(pred-y))
+        r2_log[i,ti]=np.corrcoef(pred,y)[0,1]**2
+
+        # coefs = tf,sf,ttip
+        sol2=minimize(fun=eti_f,
+                                x0=np.array([5,0.5,273.]),
+                                args=(x,x2,y2),
+                                bounds=((None,None),(None,None),(None,None)))        
     
-    x=day_i[tvers].values[:]
-    y=day_i["tdep"].values[:]
-    idx=np.logical_and(~np.isnan(x),~np.isnan(y))
-    x=x[idx]
-    y=y[idx]
-    sol=minimize(fun=tdep_f,
-                            x0=np.array([273.15,-50,10]),
-                            args=(x,y),
-                            bounds=((250,310),(None,200),(None,None)))
-                            # options={'disp':True}) 
-    
+        #eti(t,tf,sf,ttip,swn)
+        pred=core.eti(x,sol.x[0],sol.x[1],sol.x[2],x2)
+        err_log_2[i,ti]=np.mean(np.abs(pred-y2))
+        r2_log_2[i,ti]=np.corrcoef(pred,y2)[0,1]**2
     # ax2.flat[i].set_xlim(270,310)
     
     
-    refx=np.linspace(np.nanmin(day_i["teq"]),np.nanmax(day_i["teq"]),500)
-    refy=core.tdep(refx,sol.x[0],sol.x[1],sol.x[2])
-    refy=core.tdep(refx,277,-150,10)
-    ax2.flat[i].plot(refx,refy,color='red')
-    pred=core.tdep(x,sol.x[0],sol.x[1],sol.x[2])
-    print("R for %s = %.2f"%(tvers, (np.corrcoef(x,y)[0,1])))
+    # refx=np.linspace(np.nanmin(day_i[tvers]),np.nanmax(day_i[tvers]),500)
+    # refy=core.tdep(refx,sol.x[0],sol.x[1],sol.x[2])
+    # ax2.flat[i].plot(refx,refy,color='red')
+    # ax2.flat[i].set_ylim(-220,110)
+    # ax2.flat[i].set_xlim(250,310)
     # assert i != 2
     # print(sol.x)
     
@@ -180,14 +213,5 @@ plt.subplots_adjust(wspace=0.02)
 fig.savefig(din+"scratch/"+"SEB.png")
 
 
-# Optimize
-# tdep_f(coefs,t,tdep)
-# coefs = [ttip,a,b]
-init_guess=[]
-out=minimize(fun=tdep_f,
-                        x0=np.array([280,-10,10]),
-                        args=(day_i["t"].values[:],day_i["tdep"].values[:]),
-                        bounds=((250,310),(-100,100),(1,100)),
-                        method="Nelder-Mead",
-                        options={'disp':True}) 
+
     
