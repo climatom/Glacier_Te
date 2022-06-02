@@ -32,6 +32,10 @@ for i in range(nl):
     fname=din+meta["station"].iloc[i]+".csv"
     data_i=pd.read_csv(fname,parse_dates=True,\
                          index_col="date",date_parser=date_parser)
+        
+    # Create index
+    ref_idx=pd.date_range(start=data_i.index[0],end=data_i.index[-1],freq="H")
+    
     # Ensure floats
     for c in data_i.columns: data_i[c]=data_i[c].astype(float)
     # Convert time to UTC
@@ -45,9 +49,6 @@ for i in range(nl):
     data_i=data_i.sort_index()
         
     # Check s/sout and correct if necessary:
-    # toa=ut.sin_toa(doy=dhour.index.dayofyear.values,hour=dhour.index.hour.values,\
-    #                 lat=float(meta["lat"].iloc[i]),\
-    #                 lon=float(meta["lon"].iloc[i]))
     data_i["sin"].loc[data_i["sin"]<0]=0
     data_i["sin"].loc[data_i["sin"]<data_i["sout"]]=\
         data_i["sout"].loc[data_i["sin"]<data_i["sout"]]
@@ -58,29 +59,16 @@ for i in range(nl):
     lout_theory=emiss*boltz*273.15**4
     data_i["lout"].loc[data_i["lout"]>lout_theory*1.05]=np.nan
     data_i["lin"].loc[data_i["lout"]>lout_theory*1.05]=np.nan
+    # Also correct lin if greater than blackbody radiator?
+    # lin_theory=(data_i["t"]+273.15)**4*boltz
+    # data_i["lin"].loc[data_i["lin"]>lin_theory]=np.nan
     
     # Correct the RH (ensuring all are fraction)
     if np.max(data_i["rh"])>10:
         data_i["rh"]=data_i["rh"]/100.
         data_i["rh"].loc[data_i["rh"]>1]=1
         data_i["rh"].loc[data_i["rh"]<0]=0
-        
-        
-    # Resample to hour
-    dhour={}
-    for v in data_i.columns:
-        isnull=np.isnan(data_i[v])*1.
-        isnull=isnull.resample("H").sum()
-        dhour[v]=data_i[v].resample("H").mean()
-        dhour[v].loc[isnull>0]=np.nan
-    dhour=pd.DataFrame(dhour,index=isnull.index)
 
-    # Compute profile
-    # sin_prof=dhour["sin"].groupby(dhour.index.hour).apply(resample_func)
-    # sin_check.append(sin_prof)
-    # ax.plot(sin_prof)
-    # print("Processed %s"%fname)
-    
     # Fix air pressure -- if it was measured, use the LTM; otherwise use
     # the ISA
     if np.isnan(data_i["p"]).all():
@@ -109,21 +97,7 @@ for i in range(nl):
     
     # Compute the equivalent temperature (k)
     data_i["teq"]=ut.Teq(data_i["t"].values[:]+273.15,data_i["q"].values[:])
-    
-        
-    # Calc albedo
-    window_len=int(f*24)
-    min_periods=int(f*24*minpc/100.)
-    if "albedo" not in data_i.columns:
-        data_i["albedo"]=\
-            data_i["sout"].rolling(window_len,min_periods=min_periods,center=True).sum()/\
-            data_i["sin"].rolling(window_len,min_periods=min_periods,center=True).sum()             
-    # data_i["acc_alb"]=data_i["sout"].rolling(int(f*24)).sum(center=True)/\
-    #     data_i["sin"].rolling(int(f*24)).sum(center=True)
-    # ax2.plot(data_i.index,data_i["albedo"],color=cs[i],alpha=0.2)
-    # print("...Min alb = %.2f, max = %.2f"%\
-    #   (data_i["albedo"].min(), data_i["albedo"].max()))
-        
+       
     # Calc surface temp
     data_i["ts"]=np.power(data_i["lout"]/(boltz*emiss),0.25)-273.15
     data_i["ts"].loc[data_i["ts"]>0]=0.0
@@ -148,30 +122,43 @@ for i in range(nl):
     # Change t and ts to K
     data_i["t"]=data_i["t"]+273.15
     data_i["ts"]=data_i["ts"]+273.15
+    
+    # Resample to hour
+    dhour={}
+    for v in data_i.columns:
+        # isnull=np.isnan(data_i[v])*1.
+        # isnull=isnull.resample("H").sum()
+        dhour[v]=data_i[v].resample("H").mean()
+        # dhour[v].loc[isnull>0]=np.nan
+        # 
+    dhour=pd.DataFrame(dhour,index=dhour[v].index)
+    # dhour=data_i.reindex(ref_idx)
+    
+    # ****  Calc albedo for the *hourly* data
+    # window_len=int(f*24)
+    # min_periods=int(f*24*minpc/100.)
+    window_len=24
+    min_periods=window_len*minpc/100.
+    dhour["albedo"]=\
+    dhour["sout"].rolling(window_len,center=True).sum()/\
+    dhour["sin"].rolling(window_len,center=True).sum()            
+    nvalid=(dhour["sin"]+dhour["sout"]).rolling(window_len,center=True).\
+                count()
+    dhour["albedo"].loc[nvalid<min_periods]=np.nan
 
     # Now compute daily means
     dday={}
     for v in data_i.columns:
         isnull=np.isnan(data_i[v])*1.
-        isnull=isnull.resample("H").sum()
-        dday[v]=data_i[v].resample("H").mean() 
+        isnull=isnull.resample("D").sum()
+        dday[v]=data_i[v].resample("D").mean() 
         dday[v].loc[isnull>0]=np.nan
-    dday=pd.DataFrame(data_i,index=isnull.index)
-    
-    # Plot daily means
-    # for j in range(len(plot_list)):
-    #     ax.flat[j].plot(dday[plot_list[j]],label=meta["station"].iloc[i],\
-    #                     linewidth=0.5,color=cs[i],alpha=0.15)
-    #     if j == (len(plot_list))-1 and i == nl-1:
-    #         ax.flat[j].legend()
-
-    # print("...pc 99.9 rh = %.3f %%"%np.nanpercentile(data_i["rh"],99.9))
-    ax.plot(data_i.index,data_i["t"].values[:],linewidth=0.2)
-    fig.savefig(din+"scratch/"+meta["station"][i]+".png")
-    
+    dday=pd.DataFrame(dday,index=isnull.index)
+     
     ## Write out
     if not os.path.isdir(din+"cleaned/"):
         os.makedirs(din+"cleaned/")
-    dday.to_csv(din+"cleaned/"+meta["station"][i]+"_day.csv")   
+    dday.to_csv(din+"cleaned/"+meta["station"][i]+"_day.csv")  
+    dhour.to_csv(din+"cleaned/"+meta["station"][i]+"_hour.csv")  
     data_i.to_csv(din+"cleaned/"+meta["station"][i]+".csv")   
     print("Processed %s"%fname)
