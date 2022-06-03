@@ -79,6 +79,7 @@ for i in range(nl):
     mod["lin"]=data_i["lin"]
     mod["sout"]=data_i["sout"]
     mod["lout"]=data_i["lout"]
+    mod["rh"]=data_i["rh"]
     mod=pd.DataFrame(mod,index=data_i.index)
     mod.to_csv(outdir+meta["station"].iloc[i]+".csv")
     # seb_meta[meta["station"].iloc[i]]["obs_per_day"]=int(ds/3600.*24)

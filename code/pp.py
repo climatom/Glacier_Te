@@ -42,7 +42,7 @@ def eti_f(coefs,t,swn,melt,ttip):
 din="../data/"
 din_mod="../data/modelled/"
 metafile=din+"meta.csv"
-vs=["shf","lhf","swn","lwn","t","u","melt","subl","tdep","teq"]
+vs=["shf","lhf","swn","lwn","t","u","melt","subl","tdep","teq","rh","tlat"]
 plot_vs=["shf","lhf","swn","lwn","melt"]
 cs=["green","blue","orange","purple","k"]
 k=75. # Percent data availability to compute stats
@@ -66,6 +66,7 @@ for i in range(nl):
     mod=pd.read_csv(din_mod+meta["station"].iloc[i]+".csv",parse_dates=True,\
                     index_col=0)        
     mod["tdep"]=mod["shf"]+mod["lhf"]+mod["lwn"]
+    mod["tlat"]=mod["teq"]-mod["t"]
     plot_i=0
     for v in vs:
         min_hours=int(24*(k/100.))
@@ -114,57 +115,83 @@ fig.savefig(din+"scratch/"+"SEB.png")
 # Fit and eval mods (t vs teq), etc.
 #============================================================================#
 ts=["t","teq"]
+# Bootstrap params
+nboot=1000
+samp_size=30
+min_size=samp_size*10.
 # store coefs
-ttip=np.zeros((nl,2))*np.nan
-a=np.zeros((nl,2))*np.nan
-b=np.zeros((nl,2))*np.nan
-# tf=np.zeros((nl,2))*np.nan
-# sf=np.zeros((nl,2))*np.nan
-# ttip2=np.zeros((nl,2))*np.nan
-# ... and performance 
-rtdep=np.zeros((nl,2))*np.nan
-# reti=np.zeros((nl,2))*np.nan
+log_perf={}
 
+ttip=np.zeros((nl,len(ts)))*np.nan
+a=np.zeros((nl,len(ts)))*np.nan
+b=np.zeros((nl,len(ts)))*np.nan
+# ... and performance 
+rtdep=np.zeros((nl,len(ts)))*np.nan
+nboot=1000
+samp_size=90
+min_size=samp_size*3.
+# Init coefs
+coef_st=[np.array([273.15,-80,8]),np.array([273.15,-80,8])]# ,\
+#          np.array([5,-50,10])]
+    
+keys=[] # Stores the bootstrapped locs  
 for i in range(nl):
     day_i=pd.read_csv(din_mod+meta["station"].iloc[i]+"_day.csv")
+    log_perf[meta["station"].iloc[i]]=np.zeros((nboot,len(ts)))*np.nan
    
     # Find index for valid data (for model fitting)   
     idx=np.logical_and(\
         np.logical_and(~np.isnan(day_i["t"]),~np.isnan(day_i["teq"])),\
-                        np.logical_and(~np.isnan(day_i["tdep"]),\
-                                      ~np.isnan(day_i["swn"])))
-        
-    melt_t=np.nanmin(day_i["t"].loc[day_i["melt"]>0])
-    melt_teq=np.nanmin(day_i["teq"].loc[day_i["melt"]>0])
-    
+                        ~np.isnan(day_i["tdep"])) 
     y=day_i["tdep"].values[idx] 
-    y2=day_i["melt"].values[idx] 
-    x2=day_i["swn"].values[idx]
-    nt=len(ts)
-    melt_ts=[melt_t,melt_teq]
+    if len(y)>min_size: 
+        bootyes=True
+        keys.append(meta["station"].iloc[i])
+    else: bootyes=False
     
+    nt=len(ts)
     # Iterate over t and teq to fit models
     for ti in range(nt):     
         x=day_i[ts[ti]].values[idx]
-        
-        # Optimize tdep function       
-        sol=minimize(fun=tdep_f,
-                                x0=np.array([273.15,-50,10]),
-                                args=(x,y))
-                                # bounds=((None,None),(None,None),(None,None)),
-                                # method="cg")
-        pred=core.tdep(x,sol.x[0],sol.x[1],sol.x[2])   
-        ttip[i,ti]=sol.x[0]; a[i,ti]=sol.x[1]; b[i,ti]=sol.x[2]
-        rtdep[i,ti]=np.corrcoef(pred,y)[0,1]**2
-        
+        ref=np.random.choice(len(y)) 
+        if bootyes:           
+            # Bootstrap if big dataset
+            for bi in range(nboot):
+                idxi=np.random.choice(ref,samp_size)
+                xi=x[idxi]
+                yi=y[idxi]                
+                # Optimize tdep function       
+                sol=minimize(fun=tdep_f,
+                                        x0=coef_st[ti],
+                                        args=(xi,yi))
+                                        # bounds=((None,None),(None,None),(None,None)),
+                                        # method="cg")
+                pred=core.tdep(xi,sol.x[0],sol.x[1],sol.x[2]) 
+                log_perf[meta["station"].iloc[i]][bi,ti]\
+                    =np.corrcoef(pred,yi)[0,1]**2
+            print("Finished bootstrap for var %s and loc %s "%\
+                  (ts[ti],meta["station"].iloc[i]))
+            # if meta["station"].iloc[i] == "qqg" and ti == 1:
+            #     assert 1==2 
    
-        # # Repeat, ETI model
-        # sol2=minimize(fun=eti_f,
-        #                         x0=np.array([0.01,0.1,]),
-        #                         args=(x,x2,y2,melt_ts[ti]))
-        #                         # bounds=((None,None),(None,None),(250,300)),
-        #                         # method="cg")
-        # #eti(t,tf,sf,ttip,swn)
-        # pred2=core.eti(x,sol2.x[0],sol2.x[1],melt_ts[ti],x2)
-        # tf[i,ti]=sol2.x[0]; sf[i,ti]=sol2.x[1]; ttip2[i,ti]=melt_ts[ti]
-        # reti[i,ti]=np.corrcoef(pred2,y2)[0,1]**2
+        # Optimize tdep function (global)    
+        sol=minimize(fun=tdep_f,
+                     x0=coef_st[ti],
+                     args=(x,y))
+                    # bounds=((None,None),(None,None),(None,None)),
+                                        # method="cg")
+        pred=core.tdep(x,sol.x[0],sol.x[1],sol.x[2]) 
+        rtdep[i,ti]=np.corrcoef(pred,y)[0,1]**2        
+        
+        
+# Plot boot perf
+fig,ax=plt.subplots(4,2)
+cs=["green","purple"]
+for i in range(len(keys)):
+    for ti in range(len(ts)):
+        yi=log_perf[keys[i]][:,ti]
+        yi[np.abs(yi)<0.0001]=np.nan
+        yi=yi[~np.isnan(yi)]
+        if len(yi)<2: continue
+        ax.flat[i].hist(yi,bins=15,color=cs[ti],density=True)
+        ax.flat[i].set_ylim(0,10)
