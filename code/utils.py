@@ -176,3 +176,41 @@ def rho(p,tv):
     rho=np.divide(p,np.multiply(rd,tv))
     
     return rho
+
+@jit(float64[:](float64,float64,float64[:],float64[:]),nopython=True) 
+def distance(s_lat, s_lng, e_lat, e_lng):
+    
+    
+    """
+    Computes the Haversine distance
+    
+    Inputs/Outputs (units: explanation): 
+    
+    In:
+        - s_lat (deg N)  : latitude of start point
+        - s_lon (deg E)  : longitude of start point
+        - e_lat (deg N)  : latitude of end point(s)
+        - e_lon (deg E)  : longitude of end point(s)
+        
+    Out:
+    
+        - distance in km
+        
+    """    
+
+    # approximate radius of earth in km
+    R = 6373.0
+    
+    s_lat = s_lat*np.pi/180.0                      
+    s_lng = np.deg2rad(s_lng)     
+    e_lat = np.deg2rad(e_lat)                       
+    e_lng = np.deg2rad(e_lng)  
+    
+    d = np.sin((e_lat - s_lat)/2.)**2 + np.cos(s_lat)*np.cos(e_lat) * \
+        np.sin((e_lng - s_lng)/2.)**2
+        
+        
+    out=2 * R * np.arcsin(np.sqrt(d))
+    
+    return out
+

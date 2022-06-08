@@ -27,17 +27,28 @@ plot_list=["t","rh","u","sin","sout","lin","lout","p"]
 cs=["red","blue","green","orange","cyan","yellow","pink","black"]
 for i in range(nl):
     
-    fig,ax=plt.subplots(1,1)
-    
+    fig,ax=plt.subplots(1,1)    
     fname=din+meta["station"].iloc[i]+".csv"
-    data_i=pd.read_csv(fname,parse_dates=True,\
-                         index_col="date",date_parser=date_parser)
-        
-    # Create index
-    ref_idx=pd.date_range(start=data_i.index[0],end=data_i.index[-1],freq="H")
     
+    if "ice.csv" in fname or "kerst" in fname or "kan" in fname:
+        # Raw files don't have day/month/year, so process differently
+        data_i=pd.read_csv(fname)
+        nobs=len(data_i)
+        dates=np.array([datetime.datetime(year=data_i["year"].iloc[ii],month=1,\
+                       day=1,hour=0)+\
+            datetime.timedelta(days=float(data_i["dayofyear"].iloc[ii])-1) \
+                for ii in range(nobs)])
+        dates=[dates[ii]+datetime.timedelta(hours=float(data_i["hour"].iloc[ii])) \
+               for ii in range(nobs)]
+        data_i.index=dates
+        data_i.index.name="date"
+    else:
+        data_i=pd.read_csv(fname,parse_dates=True,\
+                         index_col="date",date_parser=date_parser)
+            
     # Ensure floats
     for c in data_i.columns: data_i[c]=data_i[c].astype(float)
+    
     # Convert time to UTC
     data_i.index=data_i.index+datetime.timedelta\
         (hours=meta["time_corr"].iloc[i])
@@ -57,8 +68,8 @@ for i in range(nl):
         
     # # Check and correct Lout if necessary:
     lout_theory=emiss*boltz*273.15**4
-    data_i["lout"].loc[data_i["lout"]>lout_theory*1.05]=np.nan
-    data_i["lin"].loc[data_i["lout"]>lout_theory*1.05]=np.nan
+    data_i["lout"].loc[data_i["lout"]>lout_theory*1.1]=np.nan
+    data_i["lin"].loc[data_i["lout"]>lout_theory*1.1]=np.nan
     # Also correct lin if greater than blackbody radiator?
     # lin_theory=(data_i["t"]+273.15)**4*boltz
     # data_i["lin"].loc[data_i["lin"]>lin_theory]=np.nan
@@ -132,7 +143,11 @@ for i in range(nl):
         # dhour[v].loc[isnull>0]=np.nan
         # 
     dhour=pd.DataFrame(dhour,index=dhour[v].index)
-    # dhour=data_i.reindex(ref_idx)
+    
+    # Create index for padding the hourly
+    ref_idx=pd.date_range(start=dhour.index[0],end=dhour.index[-1],freq="H")
+    dhour=dhour.reindex(ref_idx)
+
     
     # ****  Calc albedo for the *hourly* data
     # window_len=int(f*24)
@@ -158,7 +173,7 @@ for i in range(nl):
     ## Write out
     if not os.path.isdir(din+"cleaned/"):
         os.makedirs(din+"cleaned/")
-    dday.to_csv(din+"cleaned/"+meta["station"][i]+"_day.csv")  
-    dhour.to_csv(din+"cleaned/"+meta["station"][i]+"_hour.csv")  
-    data_i.to_csv(din+"cleaned/"+meta["station"][i]+".csv")   
+    dday.to_csv(din+"cleaned/"+meta["station"][i]+"_day.csv",index_label="date")  
+    dhour.to_csv(din+"cleaned/"+meta["station"][i]+"_hour.csv",index_label="date")  
+    data_i.to_csv(din+"cleaned/"+meta["station"][i]+".csv",index_label="date")     
     print("Processed %s"%fname)

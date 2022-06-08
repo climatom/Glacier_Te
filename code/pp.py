@@ -7,7 +7,7 @@ Created on Thu Jun  2 16:43:47 2022
 """
 from matplotlib.dates import DateFormatter
 import datetime,core, pandas as pd, numpy as np, matplotlib.pyplot as plt
-from scipy.optimize import minimize
+from scipy.optimize import minimize, curve_fit
 
 font = {'family' : 'normal',
         'size'   : 6}
@@ -46,6 +46,7 @@ vs=["shf","lhf","swn","lwn","t","u","melt","subl","tdep","teq","rh","tlat"]
 plot_vs=["shf","lhf","swn","lwn","melt"]
 cs=["green","blue","orange","purple","k"]
 k=75. # Percent data availability to compute stats
+bootyes_glob=False # Run bootstraps on long datasets?
 
 #============================================================================#
 # Process to daily
@@ -56,8 +57,9 @@ meta=pd.read_csv(metafile)
 seb_meta={}
 nl=len(meta)
 day={}
-fig,ax=plt.subplots(2,4)
-fig.set_size_inches(8,5)
+fig,ax=plt.subplots(2,5)
+fig.set_size_inches(15,5)
+fig.set_dpi(400)
 # Begin 
 for i in range(nl):
     
@@ -101,7 +103,7 @@ for i in range(nl):
     ax.flat[i].xaxis.set_major_locator(plt.MaxNLocator(4))
     ax.flat[i].title.set_text(meta["station"][i])
     ax.flat[i].tick_params(rotation = 45,size=6)
-    if i !=0 and i != 4:
+    if i !=0 and i != 5:
         ax.flat[i].set_yticklabels([])
     else:
         ax.flat[i].set_ylabel("W m$^{-2}$")
@@ -110,6 +112,7 @@ for i in range(nl):
 plt.tight_layout()
 fig.subplots_adjust(wspace=0.02,hspace=0.3)
 fig.savefig(din+"scratch/"+"SEB.png")
+
 
 #============================================================================#
 # Fit and eval mods (t vs teq), etc.
@@ -131,9 +134,12 @@ nboot=1000
 samp_size=90
 min_size=samp_size*3.
 # Init coefs
-coef_st=[np.array([273.15,-80,8]),np.array([273.15,-80,8])]# ,\
+coef_st=[np.array([273.15,-200,8]),np.array([280,-200,8])]# ,\
 #          np.array([5,-50,10])]
     
+fig,ax=plt.subplots(2,5)
+fig2,ax2=plt.subplots(2,5)
+axs=[ax,ax2]
 keys=[] # Stores the bootstrapped locs  
 for i in range(nl):
     day_i=pd.read_csv(din_mod+meta["station"].iloc[i]+"_day.csv")
@@ -144,7 +150,7 @@ for i in range(nl):
         np.logical_and(~np.isnan(day_i["t"]),~np.isnan(day_i["teq"])),\
                         ~np.isnan(day_i["tdep"])) 
     y=day_i["tdep"].values[idx] 
-    if len(y)>min_size: 
+    if len(y)>min_size and bootyes_glob: 
         bootyes=True
         keys.append(meta["station"].iloc[i])
     else: bootyes=False
@@ -154,16 +160,19 @@ for i in range(nl):
     for ti in range(nt):     
         x=day_i[ts[ti]].values[idx]
         ref=np.random.choice(len(y)) 
+        p0=[np.mean(x),np.percentile(y,25),10]
         if bootyes:           
             # Bootstrap if big dataset
             for bi in range(nboot):
                 idxi=np.random.choice(ref,samp_size)
                 xi=x[idxi]
-                yi=y[idxi]                
+                yi=y[idxi]     
+
                 # Optimize tdep function       
                 sol=minimize(fun=tdep_f,
                                         x0=coef_st[ti],
                                         args=(xi,yi))
+
                                         # bounds=((None,None),(None,None),(None,None)),
                                         # method="cg")
                 pred=core.tdep(xi,sol.x[0],sol.x[1],sol.x[2]) 
@@ -175,23 +184,30 @@ for i in range(nl):
             #     assert 1==2 
    
         # Optimize tdep function (global)    
-        sol=minimize(fun=tdep_f,
-                     x0=coef_st[ti],
-                     args=(x,y))
+        # sol=minimize(fun=tdep_f,
+        #              x0=coef_st[ti],
+        #              args=(x,y))
+        sol2=curve_fit(core.tdep,x,y,p0=p0)
+        pred2=core.tdep(x,sol2[0][0],sol2[0][1],sol2[0][2])
                     # bounds=((None,None),(None,None),(None,None)),
                                         # method="cg")
-        pred=core.tdep(x,sol.x[0],sol.x[1],sol.x[2]) 
-        rtdep[i,ti]=np.corrcoef(pred,y)[0,1]**2        
+        
+        # pred=core.tdep(x,sol.x[0],sol.x[1],sol.x[2]) 
+        rtdep[i,ti]=np.corrcoef(pred2,y)[0,1]**2     
+        
+        axs[ti].flat[i].scatter(x,y,s=0.5)
+        axs[ti].flat[i].scatter(x,pred2,s=0.5)
         
         
 # Plot boot perf
-fig,ax=plt.subplots(4,2)
-cs=["green","purple"]
-for i in range(len(keys)):
-    for ti in range(len(ts)):
-        yi=log_perf[keys[i]][:,ti]
-        yi[np.abs(yi)<0.0001]=np.nan
-        yi=yi[~np.isnan(yi)]
-        if len(yi)<2: continue
-        ax.flat[i].hist(yi,bins=15,color=cs[ti],density=True)
-        ax.flat[i].set_ylim(0,10)
+if bootyes_glob:
+    fig,ax=plt.subplots(4,2)
+    cs=["green","purple"]
+    for i in range(len(keys)):
+        for ti in range(len(ts)):
+            yi=log_perf[keys[i]][:,ti]
+            yi[np.abs(yi)<0.0001]=np.nan
+            yi=yi[~np.isnan(yi)]
+            if len(yi)<2: continue
+            ax.flat[i].hist(yi,bins=15,color=cs[ti],density=True)
+            ax.flat[i].set_ylim(0,10)
